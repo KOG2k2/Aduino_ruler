@@ -1,7 +1,7 @@
-#include<Wire.h> 
-#include<LiquidCrystal_I2C.h>
-#include<Servo.h>
-#include<MPU6050_tockn.h>
+#include <Wire.h> 
+//#include<LiquidCrystal_I2C.h>
+#include <LiquidCrystal_PCF8574.h>
+#include <MPU6050_tockn.h>
 
 #define NORMAL_STATE HIGH
 #define PRESSED_STATE LOW
@@ -20,12 +20,12 @@
 #define HCR_EMIT 1
 #define HCR_DONE 2
 
-LiquidCrystal_I2C lcd(0X27, 16, 2);  //SCL A5 SDA A4
+LiquidCrystal_PCF8574 lcd(0X27);  //SCL A5 SDA A4
 MPU6050 mpu6050(Wire);
 
 int mode = 1;
-int length;
-int duration;
+float length;
+long duration;
 
 float x,y, Angle;
 
@@ -42,17 +42,17 @@ bool buttonState = LOW;
 
 int lcdDelay = 500;
 
-void lcdUpdate(float x, float y, float Angle, int length, int mode){
+void lcdUpdate(float x, float y, float Angle, float length, int mode){
   lcd.clear();
   lcd.setCursor(0,0);
-  lcd.print("Mode:" + String(mode));
+  lcd.print("Mode " + String(mode));
   lcd.setCursor(0,1);
   switch(mode){
     case 1:
       lcd.print("X:" + String(x) + " Y:"+String(y));
       break;
     case 2:
-      lcd.print("Length=" + String(length) + "cm");
+      lcd.print("Distance:" + String(length));
       break;
     case 3:
       lcd.print("Angle:" + String(Angle) + " deg");
@@ -143,8 +143,8 @@ void getKeyInput(){
 //------------------------------------------------------
 
 void setup() {
-    lcd.init();
-    lcd.backlight();
+    lcd.begin(16, 2);
+    lcd.setBacklight(255);
     pinMode(TRIGGER_PIN,OUTPUT);   // chân trig sẽ phát tín hiệu
     pinMode(ECHO_PIN,INPUT);
     pinMode(LAZER_PIN, OUTPUT);
@@ -171,29 +171,37 @@ void loop() {
         y = mpu6050.getAngleY();
         if(isButtonPressed(0) == 1) mode = 2;
         break;
-      case 2:
-        switch(hcrState){
+      case 2: {
+        /*switch(hcrState){
           case HCR_INIT:
-            hcrTimer = millis();
+            hcrTimer = micros();
             digitalWrite(TRIGGER_PIN,0);
             hcrState = HCR_EMIT;
             break;
           case HCR_EMIT:
-            if(millis() - hcrTimer >= 2){
+            if(micros() - hcrTimer >= 2){
               digitalWrite(TRIGGER_PIN,1);
-              hcrTimer = millis();
+              hcrTimer = micros();
               hcrState = HCR_DONE;
             }
             break;
           case HCR_DONE:
-            if(millis() - hcrTimer >= 5){
+            if(micros() - hcrTimer >= 10){
               digitalWrite(TRIGGER_PIN,0);   // tắt chân trig
               duration = pulseIn(ECHO_PIN,HIGH); 
-              length = int(duration/2/29.412);
+              length = int((float)(duration/2)/29.412);
               hcrState = HCR_INIT;
             }
             break;
-        }
+          break;*/
+            int hcrTimer = micros();
+            digitalWrite(TRIGGER_PIN, 0);
+            if(micros() - hcrTimer >= 2) digitalWrite(TRIGGER_PIN, HIGH);
+            if(micros() - hcrTimer >= 12) digitalWrite(TRIGGER_PIN, LOW);   //  pull the trigger low after 10us
+            duration = pulseIn(ECHO_PIN, HIHH);
+            length = (float)duration * 0.017f;
+            break;
+      }
       case 3:
         hcrState = HCR_INIT;
         //todo: mode 3,4
@@ -204,6 +212,7 @@ void loop() {
         break;
       case 5:
         digitalWrite(LAZER_PIN, ON);
+        if(isButtonPressed(0) == 1) mode = 1;
         break;
       }
     if(isTimerTimeout(0)){
