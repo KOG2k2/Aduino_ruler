@@ -24,7 +24,8 @@ LiquidCrystal_PCF8574 lcd(0X27);  //SCL A5 SDA A4
 MPU6050 mpu6050(Wire);
 
 int mode = 1;
-float length;
+float length;   //stored distance (mode 2), path (mode 3) and no of revolution (mode 5)
+float offset = 0.0f;
 long duration;
 
 float x,y, Angle;
@@ -45,7 +46,7 @@ int lcdDelay = 500;
 void lcdUpdate(float x, float y, float Angle, float length, int mode){
   lcd.clear();
   lcd.setCursor(0,0);
-  lcd.print("Mode " + String(mode));
+  if(mode < 6) lcd.print("Mode " + String(mode));
   lcd.setCursor(0,1);
   switch(mode){
     case 1:
@@ -55,10 +56,13 @@ void lcdUpdate(float x, float y, float Angle, float length, int mode){
       lcd.print("Distance:" + String(length));
       break;
     case 3:
-      lcd.print("Angle:" + String(Angle) + " deg");
+      lcd.print("Curved path:" + String(length));
+      break;
+    case 4:
+      lcd.print("Angle:" + String(Angle));
       break;
     case 5:
-      lcd.print("Lazer ON");
+      lcd.print("No of rev:" + String(length));
       break;
   }
 
@@ -129,7 +133,7 @@ void getKeyInput(){
   for(int index = 0; index < NUM_OF_BUTTON; index++){
 		keyReg2[index] = keyReg1[index];
 		keyReg1[index] = keyReg0[index];
-		keyReg0[index] = digitalRead(Button[index]);
+		keyReg0[index] = !digitalRead(Button[index]);
 		if ((keyReg1[index] == keyReg0[index]) && (keyReg1[index] == keyReg2[index])){
 			if (keyReg2[index] != keyReg3[index]){
 				keyReg3[index] = keyReg2[index];
@@ -148,7 +152,7 @@ void setup() {
     pinMode(TRIGGER_PIN,OUTPUT);   // chân trig sẽ phát tín hiệu
     pinMode(ECHO_PIN,INPUT);
     pinMode(LAZER_PIN, OUTPUT);
-    pinMode(MODE_BUTTON_PIN, INPUT);
+    pinMode(MODE_BUTTON_PIN, INPUT_PULLUP);
     //lastButtonState = digitalRead(MODE_BUTTON_PIN);
     digitalWrite(TRIGGER_PIN,0);
     Serial.begin(9600);
@@ -165,7 +169,6 @@ void loop() {
     // }
     switch(mode){
       case 1:
-        digitalWrite(LAZER_PIN, OFF);
         mpu6050.update();
         x = mpu6050.getAngleX();
         y = mpu6050.getAngleY();
@@ -194,25 +197,36 @@ void loop() {
             }
             break;
           break;*/
-            int hcrTimer = micros();
-            digitalWrite(TRIGGER_PIN, 0);
-            if(micros() - hcrTimer >= 2) digitalWrite(TRIGGER_PIN, HIGH);
-            if(micros() - hcrTimer >= 12) digitalWrite(TRIGGER_PIN, LOW);   //  pull the trigger low after 10us
-            duration = pulseIn(ECHO_PIN, HIHH);
-            length = (float)duration * 0.017f;
-            break;
+        int hcrTimer = micros();
+        digitalWrite(TRIGGER_PIN, 0);
+        if(micros() - hcrTimer >= 2) digitalWrite(TRIGGER_PIN, HIGH);
+        if(micros() - hcrTimer >= 12) digitalWrite(TRIGGER_PIN, LOW);   //  pull the trigger low after 10us
+        duration = pulseIn(ECHO_PIN, HIGH);
+        length = (float)duration * 0.017f;
+        if(isButtonPressed(0) == 1) mode = 3;
+        break;
       }
       case 3:
-        hcrState = HCR_INIT;
-        //todo: mode 3,4
-        mpu6050.update();
-        Angle = mpu6050.getAngleZ()/2;
+        length = 3;
+        if(isButtonPressed(0) == 1) mode = 4;
         break;
       case 4:
+        //hcrState = HCR_INIT;
+        //todo: mode 3, 4, 5
+        mpu6050.update();
+        Angle = mpu6050.getAngleZ();
+        if(isButtonPressed(0) == 1) mode = 5;
         break;
       case 5:
+        if(isButtonPressed(0) == 1) mode = 6;
+        length = 5;
+        break;
+      case 6:
         digitalWrite(LAZER_PIN, ON);
-        if(isButtonPressed(0) == 1) mode = 1;
+        if(isButtonPressed(0) == 1) {
+          digitalWrite(LAZER_PIN, OFF);
+          mode = 1;
+        }
         break;
       }
     if(isTimerTimeout(0)){
