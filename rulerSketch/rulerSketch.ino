@@ -3,8 +3,8 @@
 #include <LiquidCrystal_PCF8574.h>
 #include <MPU6050_tockn.h>
 
-#define NORMAL_STATE HIGH
-#define PRESSED_STATE LOW
+#define NORMAL_STATE LOW
+#define PRESSED_STATE HIGH
 
 #define NUM_OF_BUTTON 1
 
@@ -20,6 +20,10 @@
 #define HCR_EMIT 1
 #define HCR_DONE 2
 
+#define ROT_CLK 9
+#define ROT_DT 10
+#define ROT_SW 11
+
 LiquidCrystal_PCF8574 lcd(0X27);  //SCL A5 SDA A4
 MPU6050 mpu6050(Wire);
 
@@ -29,6 +33,7 @@ float offset = 0.0f;
 long duration;
 
 float x,y, Angle;
+float x_error = -0.6f, y_error = -3.5f;
 
 int prevMode = 0;
 int prev_length = 0;
@@ -43,14 +48,17 @@ bool buttonState = LOW;
 
 int lcdDelay = 500;
 
+int rot_state, rot_last_state, rot_pos = 0;
+long rev_time = 0, ROT_SW_time = 0;
+
 void lcdUpdate(float x, float y, float Angle, float length, int mode){
   lcd.clear();
-  lcd.setCursor(0,0);
+  lcd.setCursor(0, 0);
   if(mode < 6) lcd.print("Mode " + String(mode));
-  lcd.setCursor(0,1);
+  lcd.setCursor(0, 1);
   switch(mode){
     case 1:
-      lcd.print("X:" + String(x) + " Y:"+String(y));
+      lcd.print("X:" + String(x+x_error) + " Y:"+String(y+y_error));
       break;
     case 2:
       lcd.print("Distance:" + String(length));
@@ -59,7 +67,7 @@ void lcdUpdate(float x, float y, float Angle, float length, int mode){
       lcd.print("Curved path:" + String(length));
       break;
     case 4:
-      lcd.print("Angle:" + String(Angle));
+      lcd.print("Angle:" + String(1.2f*Angle));
       break;
     case 5:
       lcd.print("No of rev:" + String(length));
@@ -147,19 +155,23 @@ void getKeyInput(){
 //------------------------------------------------------
 
 void setup() {
+    mode = 1;
     lcd.begin(16, 2);
     lcd.setBacklight(255);
     pinMode(TRIGGER_PIN,OUTPUT);   // chân trig sẽ phát tín hiệu
     pinMode(ECHO_PIN,INPUT);
     pinMode(LAZER_PIN, OUTPUT);
     pinMode(MODE_BUTTON_PIN, INPUT_PULLUP);
+    pinMode(ROT_DT, INPUT);
+    pinMode(ROT_SW, INPUT);
+    pinMode(ROT_CLK, INPUT);
     //lastButtonState = digitalRead(MODE_BUTTON_PIN);
     digitalWrite(TRIGGER_PIN,0);
-    Serial.begin(9600);
-    Wire.begin();
     mpu6050.begin();
     mpu6050.calcGyroOffsets(true);
     setTimer(0, 10);
+    rot_last_state = digitalRead(ROT_CLK);
+    rev_time = millis();
   // put your setup code here, to run once:
 }
 
@@ -206,20 +218,48 @@ void loop() {
         if(isButtonPressed(0) == 1) mode = 3;
         break;
       }
-      case 3:
-        length = 3;
+      case 3: //  not tested with wheel yet
+        if(digitalRead(ROT_SW) == LOW) {
+          if(millis() - ROT_SW_time > 25) {
+            rot_pos = 0;
+            length = 0;
+          }
+          ROT_SW_time = millis();
+        }
+        rot_state = digitalRead(ROT_CLK);
+        if(rot_state != rot_last_state && rot_state == HIGH) {
+          if(digitalRead(ROT_DT) != rot_state) rot_pos -= 1;
+          else rot_pos += 1;
+        }
+        rot_last_state = rot_state;
+        length = (float)rot_pos * 0.19949f; // cm
         if(isButtonPressed(0) == 1) mode = 4;
         break;
-      case 4:
+      case 4: //  todo: angle still give weird value
         //hcrState = HCR_INIT;
-        //todo: mode 3, 4, 5
         mpu6050.update();
         Angle = mpu6050.getAngleZ();
         if(isButtonPressed(0) == 1) mode = 5;
         break;
-      case 5:
+      case 5: //  not tested with wheel yet
+        if(digitalRead(ROT_SW) == LOW) {
+          if(millis() - ROT_SW_time > 25) {
+            rot_pos = 0;
+            rev_time = millis();  //  take the current time again
+          }
+          ROT_SW_time = millis();
+        }
+        rot_state = digitalRead(ROT_CLK);
+        if(rot_state != rot_last_state && rot_state == HIGH) {
+          if(digitalRead(ROT_DT) != rot_state) rot_pos -= 1;
+          else rot_pos += 1;
+        }
+        rot_last_state = rot_state;
+        if(millis() - rev_time >= 1000) {
+          length = rot_pos / 20;
+          length *= 60;
+        }
         if(isButtonPressed(0) == 1) mode = 6;
-        length = 5;
         break;
       case 6:
         digitalWrite(LAZER_PIN, ON);
