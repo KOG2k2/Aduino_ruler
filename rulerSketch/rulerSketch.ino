@@ -13,9 +13,6 @@
 #define MODE_BUTTON_PIN 2
 #define LAZER_PIN 13
 
-#define ON HIGH
-#define OFF LOW
-
 #define HCR_INIT 0
 #define HCR_EMIT 1
 #define HCR_DONE 2
@@ -41,7 +38,7 @@ int prev_length = 0;
 int lcdCount = 0;
 int hcrState = HCR_INIT;
 
-uint32_t hcrTimer = 0;
+//uint32_t hcrTimer = 0;
 uint32_t lcdTimer = 0;
 
 bool buttonState = LOW;
@@ -232,6 +229,7 @@ void loop() {
           else rot_pos += 1;
         }
         rot_last_state = rot_state;
+        if(rot_pos < 0) rot_pos = -rot_pos;
         length = (float)rot_pos * 0.19949f; // cm
         if(isButtonPressed(0) == 1) mode = 4;
         break;
@@ -255,6 +253,7 @@ void loop() {
           else rot_pos += 1;
         }
         rot_last_state = rot_state;
+        if(rot_pos < 0) rot_pos = -rot_pos;
         if(millis() - rev_time >= 1000) {
           length = rot_pos / 20;
           length *= 60;
@@ -262,9 +261,9 @@ void loop() {
         if(isButtonPressed(0) == 1) mode = 6;
         break;
       case 6:
-        digitalWrite(LAZER_PIN, ON);
+        digitalWrite(LAZER_PIN, HIGH);
         if(isButtonPressed(0) == 1) {
-          digitalWrite(LAZER_PIN, OFF);
+          digitalWrite(LAZER_PIN, LOW);
           mode = 1;
         }
         break;
